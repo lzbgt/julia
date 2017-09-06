@@ -843,8 +843,8 @@ abstract type GitObject <: AbstractGitObject end
 
 for (typ, owntyp, sup, cname) in [
     (:GitRepo,           nothing,               :AbstractGitObject, :git_repository),
-    (:GitConfig,         :(Nullable{GitRepo}),  :AbstractGitObject, :git_config),
-    (:GitIndex,          :(Nullable{GitRepo}),  :AbstractGitObject, :git_index),
+    (:GitConfig,         :(Option{GitRepo}),    :AbstractGitObject, :git_config),
+    (:GitIndex,          :(Option{GitRepo}),    :AbstractGitObject, :git_index),
     (:GitRemote,         :GitRepo,              :AbstractGitObject, :git_remote),
     (:GitRevWalker,      :GitRepo,              :AbstractGitObject, :git_revwalk),
     (:GitReference,      :GitRepo,              :AbstractGitObject, :git_reference),
@@ -894,11 +894,11 @@ for (typ, owntyp, sup, cname) in [
                 return obj
             end
         end
-        if isa(owntyp, Expr) && owntyp.args[1] == :Nullable
+        if isa(owntyp, Expr) && owntyp.args[1] == :Option
             @eval begin
-                $typ(ptr::Ptr{Void}, fin::Bool=true) = $typ($owntyp(), ptr, fin)
+                $typ(ptr::Ptr{Void}, fin::Bool=true) = $typ(null, ptr, fin)
                 $typ(owner::$(owntyp.args[2]), ptr::Ptr{Void}, fin::Bool=true) =
-                    $typ($owntyp(owner), ptr, fin)
+                    $typ(Some(owner), ptr, fin)
             end
         end
     end
@@ -1135,11 +1135,11 @@ Retains state between multiple calls to the credential callback. A single
 instances will be used when the URL has changed.
 """
 mutable struct CredentialPayload <: Payload
-    explicit::Nullable{AbstractCredentials}
-    cache::Nullable{CachedCredentials}
+    explicit::Option{AbstractCredentials}
+    cache::Option{CachedCredentials}
 
     # Ephemeral state fields
-    credential::Nullable{AbstractCredentials}
+    credential::Option{AbstractCredentials}
     first_pass::Bool
     use_ssh_agent::Char
     scheme::String
@@ -1147,23 +1147,15 @@ mutable struct CredentialPayload <: Payload
     host::String
     path::String
 
-    function CredentialPayload(credential::Nullable{<:AbstractCredentials}, cache::Nullable{CachedCredentials})
+    function CredentialPayload(credential::Option{<:AbstractCredentials}, cache::Option{CachedCredentials})
         payload = new(credential, cache)
         return reset!(payload)
     end
 end
 
-function CredentialPayload(credential::AbstractCredentials)
-    CredentialPayload(Nullable(credential), Nullable{CachedCredentials}())
-end
-
-function CredentialPayload(cache::CachedCredentials)
-    CredentialPayload(Nullable{AbstractCredentials}(), Nullable(cache))
-end
-
-function CredentialPayload()
-    CredentialPayload(Nullable{AbstractCredentials}(), Nullable{CachedCredentials}())
-end
+CredentialPayload(credential::AbstractCredentials) =  CredentialPayload(Some(credential), null)
+CredentialPayload(cache::CachedCredentials) = CredentialPayload(null, Some(cache))
+CredentialPayload() = CredentialPayload(null, null)
 
 """
     reset!(payload) -> CredentialPayload
@@ -1172,7 +1164,7 @@ Reset the `payload` state back to the initial values so that it can be used agai
 the credential callback.
 """
 function reset!(p::CredentialPayload)
-    p.credential = Nullable{AbstractCredentials}()
+    p.credential = null
     p.first_pass = true
     p.use_ssh_agent = 'Y'
     p.scheme = ""
