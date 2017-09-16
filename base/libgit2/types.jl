@@ -1135,11 +1135,11 @@ Retains state between multiple calls to the credential callback. A single
 instances will be used when the URL has changed.
 """
 mutable struct CredentialPayload <: Payload
-    explicit::Union{Some{AbstractCredentials}, Null}
+    explicit::Union{Some{<:AbstractCredentials}, Null}
     cache::Union{Some{CachedCredentials}, Null}
 
     # Ephemeral state fields
-    credential::Union{Some{AbstractCredentials}, Null}
+    credential::Union{Some{<:AbstractCredentials}, Null}
     first_pass::Bool
     use_ssh_agent::Char
     scheme::String
