@@ -2093,17 +2093,21 @@ jl_cgval_t function_sig_t::emit_a_ccall(
                 assert(rtsz > 0);
                 Value *strct = emit_allocobj(ctx, rtsz, runtime_bt);
                 int boxalign = jl_datatype_align(rt);
-#ifndef JL_NDEBUG
 #if JL_LLVM_VERSION >= 40000
                 const DataLayout &DL = jl_data_layout;
 #else
                 const DataLayout &DL = jl_ExecutionEngine->getDataLayout();
 #endif
-                // ARM and AArch64 can use a LLVM type larger than the julia
-                // type. However, the LLVM type size should be no larger than
-                // the GC allocation size. (multiple of `sizeof(void*)`)
-                assert(DL.getTypeStoreSize(lrt) <= LLT_ALIGN(rtsz, boxalign));
-#endif
+                auto resultTy = result->getType();
+                if (DL.getTypeStoreSize(resultTy) > rtsz) {
+                    // ARM and AArch64 can use a LLVM type larger than the julia type.
+                    // When this happens, cast through memory.
+                    auto slot = emit_static_alloca(ctx, resultTy);
+                    ctx.builder.CreateStore(result, slot);
+                    auto loadTy = Type::getIntNTy(jl_LLVMContext, rtsz * 8);
+                    auto to = emit_bitcast(ctx, slot, loadTy->getPointerTo());
+                    result = ctx.builder.CreateLoad(loadTy, to);
+                }
                 // copy the data from the return value to the new struct
                 MDNode *tbaa = jl_is_mutable(rt) ? tbaa_mutab : tbaa_immut;
                 init_bits_value(ctx, strct, result, tbaa, boxalign);
